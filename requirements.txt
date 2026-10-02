@@ -3,4 +3,6 @@ pandas
 numpy
 plotly
 scikit-learn
+xgboost
+lightgbm
 mftool
