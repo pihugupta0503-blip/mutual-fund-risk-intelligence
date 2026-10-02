@@ -1,8 +1,6 @@
 import sys
-import types
 
 # ----------------- PERMANENT PICKLE UNPICKLING FIX -----------------
-# Map any top-level '_loss' import lookup directly to sklearn's loss module
 try:
     import sklearn._loss
     sys.modules['_loss'] = sklearn._loss
@@ -45,7 +43,8 @@ ACTIVE_BENCHMARK_FUNDS = {
     "⭐ Mirae Asset Large Cap Fund - Direct Growth": "118834",
     "⭐ Kotak Emerging Equity Fund - Direct Growth": "120152",
     "⭐ Tata Digital India Fund - Direct Growth": "135781",
-    "⭐ Quant Active Fund - Direct Growth": "120828"
+    "⭐ Quant Active Fund - Direct Growth": "120828",
+    "⭐ Axis Children's Gift Fund - Direct Growth": "135762"
 }
 
 FEATURE_COLS = [
@@ -54,7 +53,6 @@ FEATURE_COLS = [
     'Max_Drawdown_1Y_Pct', 'Composite_Score', 'Lag_1D_Return', 'Lag_5D_Return'
 ]
 
-# 1. Load Model Bundle with Multi-Layer Fallback
 @st.cache_resource
 def load_model_bundle():
     bundle_path = 'dashboard_model_bundle.pkl'
@@ -65,14 +63,13 @@ def load_model_bundle():
         except Exception:
             pass
             
-    # Fallback Gradient Boosting Classifier if pickle cross-platform deserialization is blocked
     from sklearn.ensemble import GradientBoostingClassifier
     X_synthetic = np.array([
-        [150.0,  0.05, 18.0, 14.0, 16.0,  0.8,  1.1,  -8.0, 0.72,  0.02,  0.10], # Healthy
-        [ 85.0,  0.02, 12.0, 18.0, 20.0,  0.3,  0.4, -16.0, 0.45, -0.05,  0.02], # Watchlist
-        [ 25.0, -0.25, -5.0, 26.0, 28.0, -0.4, -0.6, -32.0, 0.22, -0.30, -0.45], # Distress
-        [210.0,  0.10, 24.0, 13.0, 15.0,  1.1,  1.5,  -6.0, 0.85,  0.08,  0.15], # Healthy
-        [ 18.0, -0.40,-12.0, 32.0, 35.0, -0.9, -1.2, -45.0, 0.15, -0.50, -0.80]  # Distress
+        [150.0,  0.05, 18.0, 14.0, 16.0,  0.8,  1.1,  -8.0, 0.72,  0.02,  0.10],
+        [ 85.0,  0.02, 12.0, 18.0, 20.0,  0.3,  0.4, -16.0, 0.45, -0.05,  0.02],
+        [ 25.0, -0.25, -5.0, 26.0, 28.0, -0.4, -0.6, -32.0, 0.22, -0.30, -0.45],
+        [210.0,  0.10, 24.0, 13.0, 15.0,  1.1,  1.5,  -6.0, 0.85,  0.08,  0.15],
+        [ 18.0, -0.40,-12.0, 32.0, 35.0, -0.9, -1.2, -45.0, 0.15, -0.50, -0.80]
     ])
     y_synthetic = np.array([0, 0, 1, 0, 1])
     clf = GradientBoostingClassifier(n_estimators=100, random_state=42)
@@ -85,16 +82,7 @@ def load_model_bundle():
             {'Fund_Name': 'HDFC Top 100 Fund - Direct Growth', 'Category': 'Large Cap', 'AMC': 'HDFC Mutual Fund', 'NAV': 1050.2, 'Fund_Star_Rating': 5, 'Composite_Score': 0.78, 'Max_Drawdown_1Y_Pct': -8.4, 'Sharpe_Ratio_Cleaned': 1.05},
             {'Fund_Name': 'Axis Bluechip Fund - Direct Growth', 'Category': 'Large Cap', 'AMC': 'Axis Mutual Fund', 'NAV': 62.4, 'Fund_Star_Rating': 4, 'Composite_Score': 0.58, 'Max_Drawdown_1Y_Pct': -14.2, 'Sharpe_Ratio_Cleaned': 0.42},
             {'Fund_Name': 'Nippon India Small Cap Fund - Direct Growth', 'Category': 'Small Cap', 'AMC': 'Nippon India Mutual Fund', 'NAV': 155.8, 'Fund_Star_Rating': 5, 'Composite_Score': 0.82, 'Max_Drawdown_1Y_Pct': -11.5, 'Sharpe_Ratio_Cleaned': 1.18}
-        ],
-        'feature_importances': {
-            'Composite_Score': 0.38,
-            'Max_Drawdown_1Y_Pct': 0.24,
-            'Sharpe_Ratio_Cleaned': 0.16,
-            'Sortino_Ratio_Cleaned': 0.10,
-            'Annualized_Return_1Y': 0.06,
-            'Volatility_30D': 0.04,
-            'NAV': 0.02
-        }
+        ]
     }
 
 @st.cache_resource
@@ -103,7 +91,8 @@ def load_all_schemes():
     try:
         codes_dict = obj.get_scheme_codes()
         df = pd.DataFrame(list(codes_dict.items()), columns=['Scheme_Code', 'Scheme_Name'])
-        df = df[~df['Scheme_Name'].str.contains(r'\bMIP\b|\bFMP\b|Fixed Maturity', case=False, na=False)]
+        # Filter out discontinued plans: MIP, FMP, and old Dividend schemes
+        df = df[~df['Scheme_Name'].str.contains(r'\bMIP\b|\bFMP\b|Fixed Maturity|Dividend', case=False, na=False)]
         df['Search_Label'] = df['Scheme_Name'] + " [Code: " + df['Scheme_Code'] + "]"
         return obj, df
     except Exception:
@@ -126,7 +115,7 @@ def compute_scheme_metrics(scheme_code):
     
     hist_data = obj.get_scheme_historical_nav(scheme_code, as_Dataframe=True)
     if hist_data is None or len(hist_data) == 0:
-        raise ValueError(f"Historical NAV data is unavailable for '{scheme_name}'.")
+        raise ValueError(f"Historical NAV data is unavailable for '{scheme_name}'. Please select an active Growth or IDCW plan.")
     
     df_nav = pd.DataFrame(hist_data)
     if 'nav' not in df_nav.columns:
@@ -242,7 +231,6 @@ def generate_audit_report(res):
     </html>
     """
 
-# ----------------- SESSION STATE FOR PAPER TRADING -----------------
 if 'cash' not in st.session_state:
     st.session_state.cash = 100000.0
 if 'portfolio' not in st.session_state:
@@ -252,19 +240,134 @@ st.sidebar.header("🕹️ Analytics Suite")
 app_mode = st.sidebar.radio(
     "Choose Analysis Module:",
     [
-        "🔍 Single Scheme Risk & Stress Tester",
         "⚔️ Head-to-Head Scheme Duel (Fund A vs Fund B)",
+        "🔍 Single Scheme Risk & Stress Tester",
         "💼 Paper Trading & AI Proof Ledger",
         "📁 Historical Dataset Archive (47,272 Records)"
     ]
 )
 
 # ==============================================================================
-# VIEW 1: SINGLE SCHEME RISK PREDICTOR + STRESS TESTER + FACTSHEET
+# VIEW 1: HEAD-TO-HEAD SCHEME DUEL
 # ==============================================================================
-if app_mode == "🔍 Single Scheme Risk & Stress Tester":
-    st.title("🔍 Single Scheme Intelligence & Stress-Testing")
+if app_mode == "⚔️ Head-to-Head Scheme Duel (Fund A vs Fund B)":
+    st.title("⚔️ Live Head-to-Head Scheme Duel")
     
+    duel_source = st.radio("Selection Source:", ["⭐ Popular Active Benchmark Schemes (Guaranteed Active)", "🔎 Search Universal Schemes"], horizontal=True, key="duel_src")
+    
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("### 🟦 Fund A")
+        if duel_source.startswith("⭐"):
+            choice_a = st.selectbox("Select Scheme A:", list(ACTIVE_BENCHMARK_FUNDS.keys()), index=0, key="duel_preset_a")
+            code_a = ACTIVE_BENCHMARK_FUNDS[choice_a]
+        else:
+            search_options = all_schemes_df['Search_Label'].tolist() if not all_schemes_df.empty else list(ACTIVE_BENCHMARK_FUNDS.keys())
+            choice_a = st.selectbox("Search Scheme A:", options=search_options, index=0, key="duel_a")
+            code_a = all_schemes_df[all_schemes_df['Search_Label'] == choice_a]['Scheme_Code'].iloc[0] if not all_schemes_df.empty else "118989"
+            
+    with col_b:
+        st.markdown("### 🟧 Fund B")
+        if duel_source.startswith("⭐"):
+            choice_b = st.selectbox("Select Scheme B:", list(ACTIVE_BENCHMARK_FUNDS.keys()), index=1, key="duel_preset_b")
+            code_b = ACTIVE_BENCHMARK_FUNDS[choice_b]
+        else:
+            search_options = all_schemes_df['Search_Label'].tolist() if not all_schemes_df.empty else list(ACTIVE_BENCHMARK_FUNDS.keys())
+            default_b = min(1, len(search_options) - 1)
+            choice_b = st.selectbox("Search Scheme B:", options=search_options, index=default_b, key="duel_b")
+            code_b = all_schemes_df[all_schemes_df['Search_Label'] == choice_b]['Scheme_Code'].iloc[0] if not all_schemes_df.empty else "120465"
+        
+    if st.button("⚔️ Launch Live Head-to-Head Duel", type="primary", use_container_width=True):
+        with st.spinner("Fetching AMFI data and evaluating AI distress indicators for both funds..."):
+            try:
+                res_a = compute_scheme_metrics(code_a.strip())
+                res_b = compute_scheme_metrics(code_b.strip())
+                
+                st.markdown("---")
+                if res_a['prob'] < res_b['prob']:
+                    st.success(f"### 🏆 WINNER: {res_a['name']} exhibits lower risk ({res_a['prob']*100:.1f}% vs {res_b['prob']*100:.1f}%)")
+                elif res_b['prob'] < res_a['prob']:
+                    st.success(f"### 🏆 WINNER: {res_b['name']} exhibits lower risk ({res_b['prob']*100:.1f}% vs {res_a['prob']*100:.1f}%)")
+                else:
+                    st.info("### ⚖️ TIE: Identical distress probability.")
+                    
+                g1, g2 = st.columns(2)
+                with g1:
+                    st.markdown(f"#### 🟦 {res_a['name']}")
+                    st.caption(f"**Category:** {res_a['category']} | **NAV:** ₹{res_a['nav']:.2f}")
+                    fig_a = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=res_a['prob'] * 100,
+                        number={'suffix': "%"},
+                        title={'text': "Distress Risk A"},
+                        gauge={
+                            'axis': {'range': [0, 100]},
+                            'bar': {'color': "crimson" if res_a['prob'] >= 0.6 else ("orange" if res_a['prob'] >= 0.3 else "#1E88E5")},
+                            'steps': [{'range': [0, 30], 'color': "#e8f5e9"}, {'range': [30, 60], 'color': "#fff8e1"}, {'range': [60, 100], 'color': "#ffebee"}]
+                        }
+                    ))
+                    fig_a.update_layout(height=260, margin=dict(l=10, r=10, t=30, b=10))
+                    st.plotly_chart(fig_a, use_container_width=True)
+                with g2:
+                    st.markdown(f"#### 🟧 {res_b['name']}")
+                    st.caption(f"**Category:** {res_b['category']} | **NAV:** ₹{res_b['nav']:.2f}")
+                    fig_b = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=res_b['prob'] * 100,
+                        number={'suffix': "%"},
+                        title={'text': "Distress Risk B"},
+                        gauge={
+                            'axis': {'range': [0, 100]},
+                            'bar': {'color': "crimson" if res_b['prob'] >= 0.6 else ("orange" if res_b['prob'] >= 0.3 else "#FF8F00")},
+                            'steps': [{'range': [0, 30], 'color': "#e8f5e9"}, {'range': [30, 60], 'color': "#fff8e1"}, {'range': [60, 100], 'color': "#ffebee"}]
+                        }
+                    ))
+                    fig_b.update_layout(height=260, margin=dict(l=10, r=10, t=30, b=10))
+                    st.plotly_chart(fig_b, use_container_width=True)
+                    
+                st.markdown("### 📊 Head-to-Head Comparison Scorecard")
+                comp_table = pd.DataFrame({
+                    "Key Parameter": [
+                        "AI Predicted Distress Risk",
+                        "Classification",
+                        "Trailing 1-Year Return",
+                        "3-Year CAGR",
+                        "1-Year Max Drawdown",
+                        "Sharpe Ratio",
+                        "Sortino Ratio",
+                        "Composite Health Score"
+                    ],
+                    f"Fund A ({res_a['name'][:24]}...)": [
+                        f"{res_a['prob']*100:.1f}%",
+                        "🔴 Distress" if res_a['prob']>=0.6 else ("🟡 Watchlist" if res_a['prob']>=0.3 else "🟢 Healthy"),
+                        f"{res_a['ret_1y']:+.2f}%",
+                        f"{res_a['ret_3y']:+.2f}%",
+                        f"{res_a['drawdown_1y']:.1f}%",
+                        f"{res_a['sharpe']:.2f}",
+                        f"{res_a['sortino']:.2f}",
+                        f"{res_a['comp_score']:.2f}"
+                    ],
+                    f"Fund B ({res_b['name'][:24]}...)": [
+                        f"{res_b['prob']*100:.1f}%",
+                        "🔴 Distress" if res_b['prob']>=0.6 else ("🟡 Watchlist" if res_b['prob']>=0.3 else "🟢 Healthy"),
+                        f"{res_b['ret_1y']:+.2f}%",
+                        f"{res_b['ret_3y']:+.2f}%",
+                        f"{res_b['drawdown_1y']:.1f}%",
+                        f"{res_b['sharpe']:.2f}",
+                        f"{res_b['sortino']:.2f}",
+                        f"{res_b['comp_score']:.2f}"
+                    ]
+                })
+                st.dataframe(comp_table, use_container_width=True, hide_index=True)
+                
+            except Exception as e:
+                st.error(f"Duel error: {e}")
+
+# ==============================================================================
+# VIEW 2: SINGLE SCHEME RISK PREDICTOR + STRESS TESTER + FACTSHEET
+# ==============================================================================
+elif app_mode == "🔍 Single Scheme Risk & Stress Tester":
+    st.title("🔍 Single Scheme Intelligence & Stress-Testing")
     trade_source = st.radio("Selection Source:", ["⭐ Popular Active Benchmark Schemes", "🔎 Search Full Scheme Universe"], horizontal=True)
     c_in, c_bt = st.columns([3.5, 1])
     with c_in:
@@ -301,7 +404,6 @@ if app_mode == "🔍 Single Scheme Risk & Stress Tester":
                     st.metric("1Y Max Drawdown", f"{res['drawdown_1y']:.1f}%")
                     
                 st.markdown("---")
-                
                 tab_core, tab_stress, tab_export = st.tabs(["📊 Core Risk Profile", "⚡ Crisis Stress-Testing", "📄 Export Factsheet"])
                 
                 with tab_core:
@@ -360,48 +462,6 @@ if app_mode == "🔍 Single Scheme Risk & Stress Tester":
                     )
             except Exception as e:
                 st.error(f"Error fetching data: {e}")
-
-# ==============================================================================
-# VIEW 2: HEAD-TO-HEAD SCHEME DUEL
-# ==============================================================================
-elif app_mode == "⚔️ Head-to-Head Scheme Duel (Fund A vs Fund B)":
-    st.title("⚔️ Live Head-to-Head Scheme Duel")
-    search_options = all_schemes_df['Search_Label'].tolist() if not all_schemes_df.empty else list(ACTIVE_BENCHMARK_FUNDS.keys())
-    
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown("### 🟦 Fund A")
-        choice_a = st.selectbox("Search Scheme A:", options=search_options, index=0, key="duel_a")
-        code_a = all_schemes_df[all_schemes_df['Search_Label'] == choice_a]['Scheme_Code'].iloc[0] if not all_schemes_df.empty else "118989"
-    with col_b:
-        st.markdown("### 🟧 Fund B")
-        default_b = min(1, len(search_options) - 1)
-        choice_b = st.selectbox("Search Scheme B:", options=search_options, index=default_b, key="duel_b")
-        code_b = all_schemes_df[all_schemes_df['Search_Label'] == choice_b]['Scheme_Code'].iloc[0] if not all_schemes_df.empty else "120465"
-        
-    if st.button("⚔️ Launch Live Head-to-Head Duel", type="primary", use_container_width=True):
-        with st.spinner("Evaluating live AMFI metrics..."):
-            try:
-                res_a = compute_scheme_metrics(code_a.strip())
-                res_b = compute_scheme_metrics(code_b.strip())
-                
-                st.markdown("---")
-                if res_a['prob'] < res_b['prob']:
-                    st.success(f"### 🏆 WINNER: {res_a['name']} exhibits lower risk ({res_a['prob']*100:.1f}% vs {res_b['prob']*100:.1f}%)")
-                elif res_b['prob'] < res_a['prob']:
-                    st.success(f"### 🏆 WINNER: {res_b['name']} exhibits lower risk ({res_b['prob']*100:.1f}% vs {res_a['prob']*100:.1f}%)")
-                else:
-                    st.info("### ⚖️ TIE: Identical distress probability.")
-                    
-                g1, g2 = st.columns(2)
-                with g1:
-                    st.markdown(f"#### 🟦 {res_a['name']}")
-                    st.metric("Live Distress Risk", f"{res_a['prob']*100:.1f}%")
-                with g2:
-                    st.markdown(f"#### 🟧 {res_b['name']}")
-                    st.metric("Live Distress Risk", f"{res_b['prob']*100:.1f}%")
-            except Exception as e:
-                st.error(f"Duel error: {e}")
 
 # ==============================================================================
 # VIEW 3: PAPER TRADING & PROOF LEDGER
